@@ -11,7 +11,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(120), nullable=False)
+    # password_hash: Mapped[str] = mapped_column(String(120), nullable=False)
 
     posts: Mapped[list[Post]] = relationship(
         back_populates="author",

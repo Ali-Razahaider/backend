@@ -8,6 +8,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     pass
+    # password: str = Field(min_length=8, max_length=128)
 
 
 class UserResponse(UserBase):
@@ -19,3 +20,7 @@ class PostBase(BaseModel):
     title: str = Field(min_length=5)
     content: str = Field(min_length=100)
     published: bool = Field(True)
+
+
+class PostCreate(BaseModel):
+    user_id: int
