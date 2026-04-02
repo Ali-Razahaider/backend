@@ -1,5 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException
-from schemas import UserCreate, UserBase, PostCreate, UserResponse, PostResponse
+from schemas import (
+    UserCreate,
+    UserBase,
+    PostCreate,
+    UserResponse,
+    PostResponse,
+    PostBase,
+)
 from typing import Annotated
 from database import get_db, Base, engine
 from sqlalchemy import select
@@ -164,6 +171,41 @@ async def create_post(
     )
 
     db.add(post)
+    await db.commit()
+    await db.refresh(post, attribute_names=["author"])
+    return post
+
+
+@app.delete("/api/posts/{post_id}")
+async def delete_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+        )
+
+    await db.delete(post)
+    await db.commit()
+
+
+@app.put("/api/posts/{post_id}", response_model=PostResponse)
+async def update_post(
+    post_id: int, post_data: PostBase, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+        )
+
+    post.title = post_data.title
+    post.content = post_data.content
+    post.published = post_data.published
+
     await db.commit()
     await db.refresh(post, attribute_names=["author"])
     return post
