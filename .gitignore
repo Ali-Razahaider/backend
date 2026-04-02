@@ -12,3 +12,5 @@ wheels/
 .codex
 .vscode
 *.db
+
+README.md
