@@ -6,6 +6,7 @@ from database import Base, engine
 from contextlib import asynccontextmanager
 
 # from sqlalchemy.orm import
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
@@ -24,3 +25,11 @@ app.include_router(posts.router, prefix="/api/posts", tags=["posts"])
 
 def home():
     return "hello world"
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
