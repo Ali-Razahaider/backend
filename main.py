@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException
-from schemas import UserCreate, UserBase, PostCreate, UserResponse
+from schemas import UserCreate, UserBase, PostCreate, UserResponse, PostResponse
 from typing import Annotated
 from database import get_db, Base, engine
 from sqlalchemy import select
 from fastapi import status
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 # from sqlalchemy.orm import
 import models
@@ -76,3 +77,91 @@ async def create_user(user: UserCreate, db: Annotated[AsyncSession, Depends(get_
     await db.refresh(new_user)
 
     return new_user
+
+
+@app.patch("/api/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int, data: UserBase, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
+
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User doesnt Exist"
+        )
+    else:
+        user.username = data.username
+        user.email = data.email
+
+    await db.commit()
+    await db.refresh(user)
+
+    return user
+
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalars().all()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found "
+        )
+
+
+@app.get("/api/posts", response_model=list[PostResponse])
+async def get_posts(db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(
+        select(models.Post).options(selectinload(models.Post.author))
+    )
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No posts found"
+        )
+    else:
+        return result.scalars().all()
+
+
+@app.get("/api/posts/{post_id}")
+async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(
+        select(models.Post)
+        .where(models.Post.id == post_id)
+        .options(selectinload(models.Post.author))
+    )
+
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No post exists"
+        )
+    else:
+        return post
+
+
+@app.post("/api/posts/", response_model=PostResponse)
+async def create_post(
+    new_post: PostCreate, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    result = await db.execute(
+        select(models.User).where(models.User.id == new_post.user_id)
+    )
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User doesnt exist"
+        )
+    post = models.Post(
+        title=new_post.title, content=new_post.content, user_id=new_post.user_id
+    )
+
+    db.add(post)
+    await db.commit()
+    await db.refresh(post, attribute_names=["author"])
+    return post

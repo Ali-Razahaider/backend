@@ -18,9 +18,16 @@ class UserResponse(UserBase):
 
 class PostBase(BaseModel):
     title: str = Field(min_length=5)
-    content: str = Field(min_length=100)
-    published: bool = Field(True)
+    content: str = Field(min_length=10)
+    published: bool = True
 
 
-class PostCreate(BaseModel):
+class PostCreate(PostBase):
     user_id: int
+
+
+class PostResponse(PostBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    author: UserResponse
