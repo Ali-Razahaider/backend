@@ -7,13 +7,24 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    pass
-    # password: str = Field(min_length=8, max_length=128)
+
+    password: str = Field(min_length=8)
 
 
-class UserResponse(UserBase):
+class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    username: str
+
+
+class UserPrivate(UserPublic):
+    model_config = ConfigDict(from_attributes=True)
+    email: EmailStr
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 
 class PostBase(BaseModel):
@@ -30,4 +41,4 @@ class PostResponse(PostBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
-    author: UserResponse
+    author: UserPublic
