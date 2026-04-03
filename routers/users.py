@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/api/users",
+    "",
     response_model=list[UserResponse],
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -29,7 +29,7 @@ async def get_users(db: Annotated[AsyncSession, Depends(get_db)]):
 
 
 @router.post(
-    "/api/users",
+    "",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -68,7 +68,7 @@ async def create_user(user: UserCreate, db: Annotated[AsyncSession, Depends(get_
     return new_user
 
 
-@router.patch("/api/users/{user_id}", response_model=UserResponse)
+@router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: int, data: UserBase, db: Annotated[AsyncSession, Depends(get_db)]
 ):
@@ -90,7 +90,7 @@ async def update_user(
     return user
 
 
-@router.delete("/api/users/{user_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{user_id}", status_code=status.HTTP_200_OK)
 async def delete_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalars().first()
