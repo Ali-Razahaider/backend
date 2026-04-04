@@ -10,6 +10,7 @@ from sqlalchemy import select
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from auth import CurrentUser
 
 # from sqlalchemy.orm import
 import models
@@ -51,19 +52,23 @@ async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.post("", response_model=PostResponse)
 async def create_post(
-    new_post: PostCreate, db: Annotated[AsyncSession, Depends(get_db)]
+    new_post: PostCreate,
+    current_user: CurrentUser,  # authenticated user can create posts
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    result = await db.execute(
-        select(models.User).where(models.User.id == new_post.user_id)
-    )
-    user = result.scalars().first()
+    # result = await db.execute(
+    #     select(models.User).where(models.User.id == new_post.user_id)
+    # )
+    # user = result.scalars().first()
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User doesnt exist"
-        )
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND, detail="User doesnt exist"
+    #     )
     post = models.Post(
-        title=new_post.title, content=new_post.content, user_id=new_post.user_id
+        title=new_post.title,
+        content=new_post.content,
+        user_id=current_user.id,
     )
 
     db.add(post)
@@ -73,22 +78,10 @@ async def create_post(
 
 
 @router.delete("/{post_id}")
-async def delete_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
-    post = result.scalars().first()
-
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
-        )
-
-    await db.delete(post)
-    await db.commit()
-
-
-@router.put("/{post_id}", response_model=PostResponse)
-async def update_post(
-    post_id: int, post_data: PostBase, db: Annotated[AsyncSession, Depends(get_db)]
+async def delete_post(
+    post_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
@@ -97,7 +90,37 @@ async def update_post(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this post",
+        )
 
+    await db.delete(post)
+    await db.commit()
+
+
+@router.put("/{post_id}", response_model=PostResponse)
+async def update_post(
+    post_id: int,
+    post_data: PostBase,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found",
+        )
+
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this post",
+        )
     post.title = post_data.title
     post.content = post_data.content
     post.published = post_data.published
