@@ -1,0 +1,11 @@
+fastapi[standard]>=0.135.2
+sqlalchemy>=2.0.48
+aiosqlite>=0.22.1
+asyncpg>=0.30.0
+greenlet>=3.3.2
+psycopg2-binary>=2.9.11
+pwdlib[argon2]>=0.3.0
+pydantic-settings>=2.13.1
+pyjwt>=2.12.1
+uvicorn[standard]
+gunicorn
