@@ -11,12 +11,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
 
 from auth import (
-    password_hash,
     create_access_token,
     oauth2_scheme,
-    verify_access_token,
     verify_password,
     hash_password,
+    CurrentUser,
 )
 from config import settings
 
@@ -30,7 +29,7 @@ router = APIRouter()
 @router.get(
     "",
     response_model=list[UserPublic],
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
 )
 async def get_users(db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.User))
@@ -110,57 +109,83 @@ async def login_for_access_token(
 
 
 @router.get("/me", response_model=UserPrivate)
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+async def get_me(current_user: CurrentUser):
+    """Get the currently authenticated user."""
+    return current_user
+
+
+@router.patch("/me", response_model=UserPrivate)
+async def update_me(
+    current_user: CurrentUser,
+    data: UserBase,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Get the currently authenticated user."""
-    user_id = verify_access_token(token)
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+    """Update the currently authenticated user's profile."""
+    # Check if new username is already taken (only if changed)
+    if data.username != current_user.username:
+        existing_username = await db.execute(
+            select(models.User).where(models.User.username == data.username)
         )
+        if existing_username.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
 
-    # Validate user_id is a valid integer (defense against malformed JWT)
-    try:
-        user_id_int = int(user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+    # Check if new email is already taken (only if changed)
+    if data.email != current_user.email:
+        existing_email = await db.execute(
+            select(models.User).where(models.User.email == data.email)
         )
+        if existing_email.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
 
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id_int),
-    )
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+    current_user.username = data.username
+    current_user.email = data.email
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    return current_user
+
+
+@router.delete("/me", status_code=status.HTTP_200_OK)
+async def delete_me(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Delete the currently authenticated user."""
+    await db.delete(current_user)
+    await db.commit()
+    return {"message": "User deleted successfully"}
 
 
 @router.patch("/{user_id}", response_model=UserPrivate)
 async def update_user(
-    user_id: int, data: UserBase, db: Annotated[AsyncSession, Depends(get_db)]
+    user_id: int,
+    data: UserBase,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
+    """Update a user (owner only)."""
+    # Enforce ownership
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot update another user's profile",
+        )
 
-    user = result.scalars().first()
-
+    user = await db.get(models.User, user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User doesnt Exist"
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    else:
-        user.username = data.username
-        user.email = data.email
+
+    user.username = data.username
+    user.email = data.email
 
     await db.commit()
     await db.refresh(user)
@@ -169,13 +194,25 @@ async def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
-async def delete_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
+async def delete_user(
+    user_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Delete a user (owner only)."""
+    # Enforce ownership
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete another user's profile",
+        )
 
+    user = await db.get(models.User, user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found "
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+
     await db.delete(user)
     await db.commit()
+    return {"message": "User deleted successfully"}
